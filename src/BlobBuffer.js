@@ -123,7 +123,7 @@
 							convertToUint8Array(newEntry.data).then(function(dataArray) {
 								let
 									totalWritten = 0,
-									buffer = Buffer.from(dataArray.buffer),
+									buffer = Buffer.from(dataArray.buffer, dataArray.byteOffset, dataArray.byteLength),
 									
 									handleWriteComplete = function(err, written, buffer) {
 										totalWritten += written;

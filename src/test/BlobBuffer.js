@@ -138,3 +138,53 @@ describe("BlobBuffer", function() {
         });
     });
 });
+
+describe("BlobBuffer file descriptors", function() {
+    function checkFile(write, expected) {
+        const fs = require('fs'),
+            path = require('path'),
+            directory = fs.mkdtempSync(path.join(require('os').tmpdir(), 'webm-writer-')),
+            filename = path.join(directory, 'output.bin'),
+            fd = fs.openSync(filename, 'w+'),
+            blobBuffer = new BlobBuffer(fd);
+
+        function cleanup() {
+            fs.closeSync(fd);
+            fs.unlinkSync(filename);
+            fs.rmdirSync(directory);
+        }
+
+        return Promise.resolve().then(function() {
+            write(blobBuffer);
+            return blobBuffer.complete();
+        }).then(function(result) {
+            const actual = fs.readFileSync(filename);
+            assert(result === null, "File completion returns null");
+            assert(actual.equals(Buffer.from(expected)), "File contains only the requested bytes");
+            assert(actual.length === blobBuffer.length, "File size matches the tracked length");
+        }).then(cleanup, function(error) {
+            cleanup();
+            throw error;
+        });
+    }
+
+    it("Writes only the selected Uint8Array view", function() {
+        return checkFile(function(blobBuffer) {
+            blobBuffer.write(new Uint8Array([99, 1, 2, 3, 99]).subarray(1, 4));
+        }, [1, 2, 3]);
+    });
+
+    it("Does not write unused capacity after a prefix view", function() {
+        return checkFile(function(blobBuffer) {
+            blobBuffer.write(new Uint8Array([1, 2, 3, 0, 0]).subarray(0, 3));
+        }, [1, 2, 3]);
+    });
+
+    it("Preserves adjacent bytes when overwriting with a view", function() {
+        return checkFile(function(blobBuffer) {
+            blobBuffer.write(new Uint8Array([1, 2, 3, 4]));
+            blobBuffer.seek(1);
+            blobBuffer.write(new Uint8Array([99, 7, 99]).subarray(1, 2));
+        }, [1, 7, 3, 4]);
+    });
+});
